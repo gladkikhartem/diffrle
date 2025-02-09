@@ -6,6 +6,10 @@ import (
 	"github.com/tidwall/btree"
 )
 
+// for items of len 1 step doesn't really matter,
+// but having some non-0 number helps to not worry about zeroes
+const defaultStep = 1
+
 // Seq is a struct to store range (FirstID is a key in btree)
 type Seq struct {
 	Step  int64
@@ -30,6 +34,9 @@ func (r Range) LastID() int64 {
 
 // ContainsID return true if id is in this range
 func (r Range) ContainsID(id int64) bool {
+	if r.Step == 0 {
+		return id == r.FirstID
+	}
 	return id >= r.FirstID && id <= r.LastID() && (id-r.FirstID)%r.Step == 0
 }
 
@@ -265,7 +272,7 @@ func (s Set) addID(id int64) *Range {
 			s.setRange(newNext)
 			r := &Range{
 				FirstID: id,
-				Step:    0,
+				Step:    defaultStep,
 				Count:   1,
 			}
 			s.setRange(r)
@@ -274,7 +281,7 @@ func (s Set) addID(id int64) *Range {
 	}
 	r := &Range{
 		FirstID: id,
-		Step:    0,
+		Step:    defaultStep,
 		Count:   1,
 	}
 	// no overlap with existing ranges - create new range with single item
@@ -380,3 +387,64 @@ func (s Set) IterAll(f func(id int64) bool) {
 		return true
 	})
 }
+
+// IterAll iterates IDs in ascending order in specified range [from,to)
+func (s Set) IterFromTo(from, to int64, f func(id int64) bool) {
+	s.m.Ascend(from, func(key int64, value Seq) bool {
+		for i := int64(0); i < value.Count; i++ {
+			v := key + i*value.Step
+			if v >= to {
+				return false
+			}
+			cont := f(v)
+			if !cont {
+				return cont
+			}
+		}
+		return true
+	})
+}
+
+// // DeleteFromTo deletes IDs in specified range [from,to)
+// func (s Set) DeleteFromTo(from, to int64, f func(id int64) bool) {
+// 	rr := []Range{}
+// 	// get all affected ranges
+// 	s.m.Descend(to, func(key int64, value Seq) bool {
+// 		r := Range{
+// 			FirstID: key,
+// 			Step:    value.Step,
+// 			Count:   value.Count,
+// 		}
+// 		if r.LastID() < from {
+// 			return false
+// 		}
+// 		rr = append(rr, r)
+// 		return true
+// 	})
+// 	if len(rr) == 0 { // no ranges before "to" key
+// 		return
+// 	}
+
+// 	for _, r := range rr {
+// 		// whole range is deleted
+// 		if r.FirstID >= from && r.LastID() <= to {
+// 			s.m.Delete(r.FirstID)
+// 			continue
+// 		}
+
+// 		// delete ids inside range (cut in half)
+// 		if r.FirstID < from && r.LastID() > to {
+// 			continue
+// 		}
+
+// 		// delete right part of sequence
+// 		if r.FirstID < from && r.LastID() >= from {
+
+// 		}
+
+// 		// delete first part of sequence
+// 		if r.FirstID <= to && r.LastID() > to {
+
+// 		}
+// 	}
+// }
