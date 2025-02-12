@@ -1,7 +1,7 @@
 # diffrle
-Differential Run Length Encoding Map (DLE) written in Pure Go
+Differential Run Length Encoding Set written in Pure Go
 
-It allows to efficiently store a set of sequential IDs that may have gaps in between. Data is stored as Btree of ranges, where each range is stored as 3 values: `start`, `step` and `count`.  So 995 IDs `1,2,3,4,5....500,555,560,565,...1000` are stored as 6 values `1,1,500|555,5,99`, providing incredible compression ratios for cases when IDs are typically follow a sequence with equal distances between each other.
+It allows to efficiently store a set of sequential IDs, allowing gaps in between. Data is stored as Btree of ranges, where each range is stored as 3 values: `start`, `step` and `count`.  So 995 IDs `1,2,3,4,5....500,555,560,565,...1000` are stored as 6 values `1,1,500|555,5,99`, providing incredible compression ratios for cases when IDs are typically follow a sequence with equal distances between each other (DB Serial columns)
 
 
 ### Performance
@@ -15,10 +15,6 @@ BenchmarkGoMapSequentialInsert 	100000000	       177.0 ns/op
 BenchmarkGoMapExist            	100000000	       101.7 ns/op
 ```
 
-Storing, Accessing and Deleting ranges is O(log n) operation, since [Btree](github.com/tidwall/btree) is used under the hood.
-
-Sequential inserts are fast, since if new ID is as added to the end of the range - we extend it without adding leafs to Btree. But random inserts are ~ 5X slower than go map, due to overhead of adding new range to Btree, then merging it with neighbours.
-
 ### Usage
 
 ```
@@ -26,6 +22,7 @@ Sequential inserts are fast, since if new ID is as added to the end of the range
 d := NewSet(100) // new set with btree of dimension 100
 d.Set(1) // add new ID to set
 d.Delete(1) // delete new ID from set
+d.DeleteFromTo(0,100) // delete range of IDs
 d.Exists(1) // checks if id exists in the set
 d.Ranges() // returns underlying ranges
 d.IterAll(func(v int64) bool) { // iterate all IDs in range
@@ -37,6 +34,7 @@ d.IterFromTo(0, 100, func(v int64) bool) l{ // iterate all IDs in range [0,100)
     // ...
     return true
 })
+
 
 ```
 

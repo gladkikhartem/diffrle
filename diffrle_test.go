@@ -104,6 +104,59 @@ func TestDelete(t *testing.T) {
 
 }
 
+func TestDeleteRangeSame(t *testing.T) {
+	d := NewSet(1000)
+	d.Set(0)
+	d.Set(1)
+	d.Set(2)
+	d.Set(3)
+	d.Set(4)
+	d.Set(5)
+
+	d.DeleteFromTo(1, 1)
+	require.True(t, d.Exists(0))
+	require.True(t, d.Exists(2))
+	require.False(t, d.Exists(1))
+
+	d.DeleteFromTo(2, 2)
+
+	d.DeleteFromTo(3, 3)
+
+	d.DeleteFromTo(4, 4)
+
+	require.True(t, d.Exists(0))
+	require.False(t, d.Exists(1))
+	require.False(t, d.Exists(2))
+	require.False(t, d.Exists(3))
+	require.False(t, d.Exists(4))
+	require.True(t, d.Exists(5))
+	rr := d.Ranges()
+	require.Len(t, rr, 2)
+}
+
+func TestDeleteRangeBetweenSteps(t *testing.T) {
+	d := NewSet(1000)
+	d.Set(0)
+	d.Set(100)
+	d.Set(200)
+	d.Set(300)
+
+	rr := d.Ranges()
+	require.Len(t, rr, 1)
+
+	d.DeleteFromTo(250, 300)
+	require.False(t, d.Exists(300))
+	require.True(t, d.Exists(200))
+
+	d.DeleteFromTo(0, 99)
+	require.False(t, d.Exists(0))
+	require.True(t, d.Exists(100))
+
+	d.DeleteFromTo(101, 199)
+	require.True(t, d.Exists(100))
+	require.True(t, d.Exists(200))
+}
+
 func TestIterAll(t *testing.T) {
 	size := 1000
 	arr := make([]int64, size)

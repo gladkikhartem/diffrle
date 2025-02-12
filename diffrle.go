@@ -2,6 +2,7 @@ package diffrle
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/tidwall/btree"
 )
@@ -24,11 +25,14 @@ type Range struct {
 }
 
 func (r Range) String() string {
-	return fmt.Sprintf("<%d|%d|%d>", r.FirstID, r.Step, r.LastID())
+	return fmt.Sprintf("<%d|%d:%d|%d>", r.FirstID, r.Step, r.Count, r.LastID())
 }
 
 // LastID returns last id of the range
 func (r Range) LastID() int64 {
+	if r.Step == 0 {
+		return r.FirstID
+	}
 	return r.FirstID + (r.Count-1)*r.Step
 }
 
@@ -84,6 +88,12 @@ func (s Set) Exists(id int64) bool {
 }
 
 func (s Set) setRange(r *Range) {
+	if r.Count <= 0 {
+		panic("wrong logic - count <= 0")
+	}
+	if r.Step <= 0 {
+		panic("wrong logic - step < =0")
+	}
 	s.m.Set(r.FirstID, Seq{
 		Step:  r.Step,
 		Count: r.Count,
@@ -405,46 +415,95 @@ func (s Set) IterFromTo(from, to int64, f func(id int64) bool) {
 	})
 }
 
-// // DeleteFromTo deletes IDs in specified range [from,to)
-// func (s Set) DeleteFromTo(from, to int64, f func(id int64) bool) {
-// 	rr := []Range{}
-// 	// get all affected ranges
-// 	s.m.Descend(to, func(key int64, value Seq) bool {
-// 		r := Range{
-// 			FirstID: key,
-// 			Step:    value.Step,
-// 			Count:   value.Count,
-// 		}
-// 		if r.LastID() < from {
-// 			return false
-// 		}
-// 		rr = append(rr, r)
-// 		return true
-// 	})
-// 	if len(rr) == 0 { // no ranges before "to" key
-// 		return
-// 	}
+// DeleteFromTo deletes IDs in specified range [from,to)
+func (s Set) DeleteFromTo(from, to int64) {
+	log.Print("BEFORE ", s.Ranges())
+	defer func() {
+		log.Print("AFTER ", s.Ranges())
+	}()
+	rr := []Range{}
+	// get all affected ranges
+	s.m.Descend(to, func(key int64, value Seq) bool {
+		r := Range{
+			FirstID: key,
+			Step:    value.Step,
+			Count:   value.Count,
+		}
+		if r.LastID() < from {
+			return false
+		}
+		rr = append(rr, r)
+		return true
+	})
+	if len(rr) == 0 { // no ranges before "to"
+		return
+	}
 
-// 	for _, r := range rr {
-// 		// whole range is deleted
-// 		if r.FirstID >= from && r.LastID() <= to {
-// 			s.m.Delete(r.FirstID)
-// 			continue
-// 		}
+	for _, r := range rr {
+		// delete whole range (applicable for all ranges in range [1:len(rr)-1]
+		// -------<         range        >---------
+		//   from-----------------------------to
+		if from <= r.FirstID && to >= r.LastID() {
+			s.m.Delete(r.FirstID)
+			continue
+		}
+		// no intersection
+		// -------------------<range>---------
+		//   from--------to
+		// OR
+		// ----<range>---------
+		//   -------------from--------to
+		if from < r.FirstID && to < r.FirstID {
+			continue
+		}
+		if from > r.LastID() && to > r.LastID() {
+			continue
+		}
 
-// 		// delete ids inside range (cut in half)
-// 		if r.FirstID < from && r.LastID() > to {
-// 			continue
-// 		}
+		fromIndex := (from - r.FirstID) / r.Step
+		fromRemainder := (from - r.FirstID) % r.Step
+		toIndex := (to - r.FirstID) / r.Step
 
-// 		// delete right part of sequence
-// 		if r.FirstID < from && r.LastID() >= from {
+		keepLeftCount := fromIndex + 1
+		if fromRemainder == 0 {
+			keepLeftCount--
+		}
+		keepRightCount := r.Count - toIndex - 1
 
-// 		}
+		if from > r.FirstID && to < r.LastID() {
+			if keepLeftCount+keepRightCount == r.Count {
+				// ---<  1               100              200     >---------
+				//            from---to
+				// keep left and right part - deleted range lies between steps
+				continue
+			}
+		}
 
-// 		// delete first part of sequence
-// 		if r.FirstID <= to && r.LastID() > to {
+		// -------<         range        >---------
+		//                 from-------------...
+		//        <  kept >
+		if keepLeftCount > 0 { // keep left
+			newPrev := &Range{
+				FirstID: r.FirstID,
+				Step:    r.Step,
+				Count:   keepLeftCount,
+			}
+			s.setRange(newPrev)
+		} else {
+			s.m.Delete(r.FirstID)
+		}
 
-// 		}
-// 	}
-// }
+		// -------<         range        >---------
+		//   ...------------to
+		//                    <   kept   >
+		if keepRightCount > 0 { // keep right
+			log.Print("RIGHT ", keepRightCount)
+			newPrev := &Range{
+				FirstID: r.LastID() - r.Step*(keepRightCount-1),
+				Step:    r.Step,
+				Count:   keepRightCount,
+			}
+			s.setRange(newPrev)
+		}
+	}
+}
