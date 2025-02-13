@@ -397,12 +397,12 @@ func (s Set) IterAll(f func(id int64) bool) {
 	})
 }
 
-// IterAll iterates IDs in ascending order in specified range [from,to)
+// IterAll iterates IDs in ascending order in specified range [from,to]
 func (s Set) IterFromTo(from, to int64, f func(id int64) bool) {
 	s.m.Ascend(from, func(key int64, value seq) bool {
 		for i := int64(0); i < value.Count; i++ {
 			v := key + i*value.Step
-			if v >= to {
+			if v > to {
 				return false
 			}
 			cont := f(v)
@@ -414,7 +414,7 @@ func (s Set) IterFromTo(from, to int64, f func(id int64) bool) {
 	})
 }
 
-// DeleteFromTo deletes IDs in specified range [from,to)
+// DeleteFromTo deletes IDs in specified range, inclusive [from,to]
 func (s Set) DeleteFromTo(from, to int64) {
 	rr := []Range{}
 	// get all affected ranges

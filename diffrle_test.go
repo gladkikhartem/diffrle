@@ -217,7 +217,7 @@ func TestIterFromTo(t *testing.T) {
 		return true
 	})
 	require.Len(t, rr, size)
-	require.Equal(t, 100, count)
+	require.Equal(t, 101, count)
 }
 
 func BenchmarkRandomInsert(b *testing.B) {
