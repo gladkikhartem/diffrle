@@ -30,17 +30,23 @@ BenchmarkGoMapExist            	100000000	       101.7 ns/op
 
 ``` go
 d := NewSet(100) // new set with btree of dimension 100
+
 d.Set(1) // add new ID to set
+
 d.Delete(1) // delete new ID from set
+
 d.DeleteFromTo(0,100) // delete range of IDs
+
 d.Exists(1) // checks if id exists in the set
+
 d.Ranges() // returns underlying ranges
+
 d.IterAll(func(v int64) bool) { // iterate all IDs in range
     //...
     return true
 })
 
-d.IterFromTo(0, 100, func(v int64) bool) l{ // iterate all IDs in range [0,100)
+d.IterFromTo(0, 100, func(v int64) bool) { // iterate all IDs in range [0,100)
     // ...
     return true
 })
