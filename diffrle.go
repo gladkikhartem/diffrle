@@ -2,7 +2,6 @@ package diffrle
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/tidwall/btree"
 )
@@ -11,13 +10,13 @@ import (
 // but having some non-0 number helps to not worry about zeroes
 const defaultStep = 1
 
-// Seq is a struct to store range (FirstID is a key in btree)
-type Seq struct {
+// seq is a struct to store range (FirstID is a key in btree)
+type seq struct {
 	Step  int64
 	Count int64
 }
 
-// Range of sequential values, evently spaced by step
+// Range of sequential values, evenly spaced by step
 type Range struct {
 	FirstID int64
 	Step    int64
@@ -46,21 +45,21 @@ func (r Range) ContainsID(id int64) bool {
 
 // Set that is optimized for storing sequential IDs
 type Set struct {
-	m *btree.Map[int64, Seq]
+	m *btree.Map[int64, seq]
 }
 
 // NewSet returns empty set
 func NewSet(degree int) *Set {
 	return &Set{
-		m: btree.NewMap[int64, Seq](degree),
+		m: btree.NewMap[int64, seq](degree),
 	}
 }
 
 // NewSetFromRanges returns set initialized with ranges
 func NewSetFromRanges(degree int, rr []Range) *Set {
-	m := btree.NewMap[int64, Seq](degree)
+	m := btree.NewMap[int64, seq](degree)
 	for _, v := range rr {
-		m.Set(v.FirstID, Seq{
+		m.Set(v.FirstID, seq{
 			Count: v.Count,
 			Step:  v.Step,
 		})
@@ -73,7 +72,7 @@ func NewSetFromRanges(degree int, rr []Range) *Set {
 // Exists returns true if ID exists in set
 func (s Set) Exists(id int64) bool {
 	var prev *Range
-	s.m.Descend(id, func(key int64, df Seq) bool {
+	s.m.Descend(id, func(key int64, df seq) bool {
 		prev = &Range{
 			FirstID: key,
 			Step:    df.Step,
@@ -89,12 +88,12 @@ func (s Set) Exists(id int64) bool {
 
 func (s Set) setRange(r *Range) {
 	if r.Count <= 0 {
-		panic("wrong logic - count <= 0")
+		panic("critical bug in diffrle library, count <=0 during insert")
 	}
 	if r.Step <= 0 {
-		panic("wrong logic - step < =0")
+		panic("critical bug in diffrle library, step <=0 during insert")
 	}
-	s.m.Set(r.FirstID, Seq{
+	s.m.Set(r.FirstID, seq{
 		Step:  r.Step,
 		Count: r.Count,
 	})
@@ -106,10 +105,10 @@ func (s Set) compactAdjacentRanges(r *Range) {
 		return
 	}
 
-	// compact ranges to the left
+	// compact ranges to the left, we don't expect more than 2 iterations
 	for {
 		var prev *Range
-		s.m.Descend(r.FirstID-1, func(key int64, df Seq) bool {
+		s.m.Descend(r.FirstID-1, func(key int64, df seq) bool {
 			prev = &Range{
 				FirstID: key,
 				Step:    df.Step,
@@ -129,7 +128,7 @@ func (s Set) compactAdjacentRanges(r *Range) {
 	// compact ranges to the right
 	for {
 		var next *Range
-		s.m.Ascend(r.LastID()+1, func(key int64, df Seq) bool {
+		s.m.Ascend(r.LastID()+1, func(key int64, df seq) bool {
 			next = &Range{
 				FirstID: key,
 				Step:    df.Step,
@@ -247,7 +246,7 @@ func (s Set) Set(id int64) {
 
 func (s Set) addID(id int64) *Range {
 	var prev *Range
-	s.m.Descend(id, func(key int64, df Seq) bool {
+	s.m.Descend(id, func(key int64, df seq) bool {
 		if prev == nil {
 			prev = &Range{
 				FirstID: key,
@@ -295,7 +294,7 @@ func (s Set) addID(id int64) *Range {
 		Count:   1,
 	}
 	// no overlap with existing ranges - create new range with single item
-	s.m.Set(r.FirstID, Seq{
+	s.m.Set(r.FirstID, seq{
 		Step:  r.Step,
 		Count: r.Count,
 	})
@@ -306,7 +305,7 @@ func (s Set) addID(id int64) *Range {
 // returns true if item was found and deleted
 func (s Set) Delete(id int64) bool {
 	var prev *Range
-	s.m.Descend(id, func(key int64, df Seq) bool {
+	s.m.Descend(id, func(key int64, df seq) bool {
 		if prev == nil {
 			prev = &Range{
 				FirstID: key,
@@ -374,7 +373,7 @@ func (s Set) Delete(id int64) bool {
 // Ranges returns all underlying ranges in the set in ascending order
 func (s Set) Ranges() []Range {
 	rr := []Range{}
-	s.m.Ascend(0, func(key int64, value Seq) bool {
+	s.m.Ascend(0, func(key int64, value seq) bool {
 		rr = append(rr, Range{
 			FirstID: key,
 			Step:    value.Step,
@@ -387,7 +386,7 @@ func (s Set) Ranges() []Range {
 
 // IterAll iterates all IDs in the set in ascending order
 func (s Set) IterAll(f func(id int64) bool) {
-	s.m.Ascend(0, func(key int64, value Seq) bool {
+	s.m.Ascend(0, func(key int64, value seq) bool {
 		for i := int64(0); i < value.Count; i++ {
 			cont := f(key + i*value.Step)
 			if !cont {
@@ -400,7 +399,7 @@ func (s Set) IterAll(f func(id int64) bool) {
 
 // IterAll iterates IDs in ascending order in specified range [from,to)
 func (s Set) IterFromTo(from, to int64, f func(id int64) bool) {
-	s.m.Ascend(from, func(key int64, value Seq) bool {
+	s.m.Ascend(from, func(key int64, value seq) bool {
 		for i := int64(0); i < value.Count; i++ {
 			v := key + i*value.Step
 			if v >= to {
@@ -417,13 +416,9 @@ func (s Set) IterFromTo(from, to int64, f func(id int64) bool) {
 
 // DeleteFromTo deletes IDs in specified range [from,to)
 func (s Set) DeleteFromTo(from, to int64) {
-	log.Print("BEFORE ", s.Ranges())
-	defer func() {
-		log.Print("AFTER ", s.Ranges())
-	}()
 	rr := []Range{}
 	// get all affected ranges
-	s.m.Descend(to, func(key int64, value Seq) bool {
+	s.m.Descend(to, func(key int64, value seq) bool {
 		r := Range{
 			FirstID: key,
 			Step:    value.Step,
@@ -497,7 +492,6 @@ func (s Set) DeleteFromTo(from, to int64) {
 		//   ...------------to
 		//                    <   kept   >
 		if keepRightCount > 0 { // keep right
-			log.Print("RIGHT ", keepRightCount)
 			newPrev := &Range{
 				FirstID: r.LastID() - r.Step*(keepRightCount-1),
 				Step:    r.Step,
