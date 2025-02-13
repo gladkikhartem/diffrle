@@ -45,11 +45,3 @@ d.IterFromTo(0, 100, func(v int64) bool) l{ // iterate all IDs in range [0,100)
     return true
 })
 ```
-
-
-
-### Use-case: Outbox
-For DB tables with serial primary IDs - it's possible to avoid updating status of each row and keep a list of sent/processed IDs in a separate place with few KB in size.
-This can be useful in sutation where it's not possible to update original table, such a legacy systems, DBs you don't own or you already have high write-throughput and don't want make another update for each row.
-
-
